@@ -71,7 +71,7 @@ const CassRawResult* cass_future_get_raw_result(CassFuture* future) {
   }
 
   Response::Ptr response(static_cast<ResponseFuture*>(future->from())->response());
-  if (!response || response->opcode() == CQL_OPCODE_ERROR || !response->is_raw()) {
+  if (!response || !response->is_raw()) {
     return NULL;
   }
 
