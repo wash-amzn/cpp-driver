@@ -254,6 +254,11 @@ void Connection::on_read(const char* buf, size_t size) {
                 host_->address_string().c_str());
 
       if (response->stream() < 0) {
+          if (!response->decode_response_body(false)) {
+            LOG_ERROR("Error decoding event response body");
+            defunct();
+            continue;
+          }
         if (response->opcode() == CQL_OPCODE_EVENT) {
           listener_->on_event(response->response_body());
         } else {
@@ -266,6 +271,12 @@ void Connection::on_read(const char* buf, size_t size) {
         RequestCallback::Ptr callback;
 
         if (stream_manager_.get(response->stream(), callback)) {
+          if (!response->decode_response_body(callback->request()->is_raw())) {
+            LOG_ERROR("Error decoding response body");
+            defunct();
+            continue;
+          }
+
           switch (callback->state()) {
             case RequestCallback::REQUEST_STATE_READING:
               pending_reads_.remove(callback.get());

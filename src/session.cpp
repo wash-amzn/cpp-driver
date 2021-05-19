@@ -99,6 +99,12 @@ CassFuture* cass_session_execute_batch(CassSession* session, const CassBatch* ba
   return CassFuture::to(future.get());
 }
 
+CassFuture* cass_session_execute_raw(CassSession* session, cass_uint8_t opcode, cass_uint8_t flags, const char* frame, size_t frame_size) {
+  Future::Ptr future(session->execute(Request::ConstPtr(new RawRequest(opcode, frame, frame_size))));
+  future->inc_ref();
+  return CassFuture::to(future.get());
+}
+
 const CassSchemaMeta* cass_session_get_schema_meta(const CassSession* session) {
   return CassSchemaMeta::to(new Metadata::SchemaSnapshot(session->cluster()->schema_snapshot()));
 }

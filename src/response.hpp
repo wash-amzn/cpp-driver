@@ -46,7 +46,7 @@ public:
 
   const RefBuffer::Ptr& buffer() const { return buffer_; }
 
-  void set_buffer(size_t size) { buffer_ = RefBuffer::Ptr(RefBuffer::create(size)); }
+  void set_buffer(const RefBuffer::Ptr& buffer) { buffer_ = buffer; }
 
   bool has_tracing_id() const;
 
@@ -62,6 +62,8 @@ public:
 
   bool decode_warnings(Decoder& decoder);
 
+  virtual bool is_raw() const { return false; }
+
   virtual bool decode(Decoder& decoder) = 0;
 
 private:
@@ -73,6 +75,24 @@ private:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(Response);
+};
+
+class RawResponse : public Response {
+public:
+  RawResponse(uint8_t opcode, size_t length)
+    : Response(opcode)
+    , length_(length) { }
+
+  size_t length() const { return length_; }
+
+  virtual bool is_raw() const { return true; }
+
+  virtual bool decode(Decoder& decoder) {
+    return true; //  Ignore decoding the body
+  }
+
+private:
+  size_t length_;
 };
 
 class ResponseMessage : public Allocated {
@@ -88,8 +108,8 @@ public:
       , is_header_received_(false)
       , header_buffer_pos_(header_buffer_)
       , is_body_ready_(false)
-      , is_body_error_(false)
-      , body_buffer_pos_(NULL) {}
+      , body_buffer_pos_(NULL)
+      , invalid_protocol_error_(false) { }
 
   uint8_t flags() const { return flags_; }
 
@@ -102,6 +122,8 @@ public:
   bool is_body_ready() const { return is_body_ready_; }
 
   ssize_t decode(const char* input, size_t size);
+
+  bool decode_response_body(bool is_raw);
 
 private:
   bool allocate_body(int8_t opcode);
@@ -120,14 +142,22 @@ private:
   char* header_buffer_pos_;
 
   bool is_body_ready_;
-  bool is_body_error_;
-  Response::Ptr response_body_;
   char* body_buffer_pos_;
+  RefBuffer::Ptr buffer_;
+  bool invalid_protocol_error_;
+  Response::Ptr response_body_;
+
+  Decoder response_decoder_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ResponseMessage);
 };
 
 }}} // namespace datastax::internal::core
+
+
+typedef struct CassRawResult_ CassRawResult;
+
+EXTERNAL_TYPE(datastax::internal::core::RawResponse, CassRawResult)
 
 #endif

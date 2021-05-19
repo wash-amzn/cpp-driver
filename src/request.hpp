@@ -187,6 +187,8 @@ public:
   void set_host(const Address& host) { host_.reset(new Address(host)); }
   const Address* host() const { return host_.get(); }
 
+  virtual bool is_raw() const { return false; }
+
   virtual int encode(ProtocolVersion version, RequestCallback* callback, BufferVec* bufs) const = 0;
 
 private:
@@ -211,6 +213,24 @@ public:
 
   virtual bool get_routing_key(String* routing_key) const = 0;
 };
+
+class RawRequest : public Request {
+public:
+  RawRequest(uint8_t opcode, const char* buf, size_t buf_size)
+    : Request(opcode)
+    , buf_(buf, buf_size) { }
+
+  virtual bool is_raw() const { return true; }
+
+  virtual int encode(ProtocolVersion version, RequestCallback* callback, BufferVec* bufs) const {
+    bufs->push_back(buf_);
+    return static_cast<int>(buf_.size());
+  }
+
+private:
+  Buffer buf_;
+};
+
 
 }}} // namespace datastax::internal::core
 

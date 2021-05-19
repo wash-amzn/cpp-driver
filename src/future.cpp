@@ -57,12 +57,26 @@ const CassResult* cass_future_get_result(CassFuture* future) {
   }
 
   Response::Ptr response(static_cast<ResponseFuture*>(future->from())->response());
-  if (!response || response->opcode() == CQL_OPCODE_ERROR) {
+  if (!response || response->opcode() == CQL_OPCODE_ERROR || response->is_raw()) {
     return NULL;
   }
 
   response->inc_ref();
   return CassResult::to(static_cast<ResultResponse*>(response.get()));
+}
+
+const CassRawResult* cass_future_get_raw_result(CassFuture* future) {
+  if (future->type() != Future::FUTURE_TYPE_RESPONSE) {
+    return NULL;
+  }
+
+  Response::Ptr response(static_cast<ResponseFuture*>(future->from())->response());
+  if (!response || response->opcode() == CQL_OPCODE_ERROR || !response->is_raw()) {
+    return NULL;
+  }
+
+  response->inc_ref();
+  return CassRawResult::to(static_cast<RawResponse*>(response.get()));
 }
 
 const CassPrepared* cass_future_get_prepared(CassFuture* future) {

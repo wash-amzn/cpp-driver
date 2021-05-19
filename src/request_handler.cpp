@@ -462,6 +462,11 @@ void RequestExecution::on_set(ResponseMessage* response) {
   current_host_->decrement_inflight_requests();
   Connection* connection = connection_;
 
+  if (response->response_body()->is_raw()) {
+    set_response(response->response_body());
+    return;
+  }
+
   switch (response->opcode()) {
     case CQL_OPCODE_RESULT:
       on_result_response(connection, response);

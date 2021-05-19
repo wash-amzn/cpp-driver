@@ -28,6 +28,18 @@
 
 using namespace datastax::internal::core;
 
+extern "C" {
+
+void cass_raw_result_free(const CassRawResult* result) { result->dec_ref(); }
+
+cass_uint8_t cass_raw_result_opcode(const CassRawResult* result) { return result->opcode(); }
+
+const char* cass_raw_result_frame(const CassRawResult* result) { return result->data(); }
+
+size_t cass_raw_result_frame_length(const CassRawResult* result) { return result->length(); }
+
+}
+
 /**
  * A dummy invalid protocol error response that's used to handle responses
  * encoded with deprecated protocol versions.
@@ -58,9 +70,7 @@ bool Response::decode_custom_payload(Decoder& decoder) {
 bool Response::decode_warnings(Decoder& decoder) { return decoder.decode_warnings(warnings_); }
 
 bool ResponseMessage::allocate_body(int8_t opcode) {
-  response_body_.reset();
   switch (opcode) {
-
     case CQL_OPCODE_ERROR:
       response_body_.reset(new ErrorResponse());
       return true;
@@ -144,13 +154,11 @@ ssize_t ResponseMessage::decode(const char* input, size_t size) {
       // If a deprecated version of the protocol is encountered then we fake
       // an invalid protocol error.
       if (version_ < CASS_PROTOCOL_VERSION_V3) {
-        response_body_.reset(new InvalidProtocolErrorResponse());
-      } else if (!allocate_body(opcode_) || !response_body_) {
-        return -1;
+        invalid_protocol_error_ = true;
+      } else {
+        buffer_ = RefBuffer::Ptr(RefBuffer::create(length_));
+        body_buffer_pos_ = buffer_->data();
       }
-
-      response_body_->set_buffer(length_);
-      body_buffer_pos_ = response_body_->data();
     } else {
       // We haven't received all the data for the header. We consume the
       // entire buffer.
@@ -171,25 +179,9 @@ ssize_t ResponseMessage::decode(const char* input, size_t size) {
     memcpy(body_buffer_pos_, input_pos, needed);
     body_buffer_pos_ += needed;
     input_pos += needed;
-    assert(body_buffer_pos_ == response_body_->data() + length_);
-    Decoder decoder(response_body_->data(), length_, ProtocolVersion(version_));
+    assert(body_buffer_pos_ == buffer_->data() + length_);
 
-    if (flags_ & CASS_FLAG_TRACING) {
-      if (!response_body_->decode_trace_id(decoder)) return -1;
-    }
-
-    if (flags_ & CASS_FLAG_WARNING) {
-      if (!response_body_->decode_warnings(decoder)) return -1;
-    }
-
-    if (flags_ & CASS_FLAG_CUSTOM_PAYLOAD) {
-      if (!response_body_->decode_custom_payload(decoder)) return -1;
-    }
-
-    if (!response_body_->decode(decoder)) {
-      is_body_error_ = true;
-      return -1;
-    }
+    response_decoder_ =  Decoder(buffer_->data(), length_, ProtocolVersion(version_));
 
     is_body_ready_ = true;
   } else {
@@ -201,4 +193,41 @@ ssize_t ResponseMessage::decode(const char* input, size_t size) {
   }
 
   return input_pos - input;
+}
+
+bool ResponseMessage::decode_response_body(bool is_raw) {
+  if (invalid_protocol_error_) {
+    response_body_.reset(new InvalidProtocolErrorResponse());
+    return true;
+  }
+
+  if (is_raw) {
+    response_body_.reset(new RawResponse(opcode_, length_));
+    response_body_->set_buffer(buffer_);
+    return true;
+  }
+
+  if (!allocate_body(opcode_)) {
+    return false;
+  }
+
+  response_body_->set_buffer(buffer_);
+
+  if (flags_ & CASS_FLAG_TRACING) {
+    if (!response_body_->decode_trace_id(response_decoder_)) return false;
+  }
+
+  if (flags_ & CASS_FLAG_WARNING) {
+    if (!response_body_->decode_warnings(response_decoder_)) return false;
+  }
+
+  if (flags_ & CASS_FLAG_CUSTOM_PAYLOAD) {
+    if (!response_body_->decode_custom_payload(response_decoder_)) return false;
+  }
+
+  if (!response_body_->decode(response_decoder_)) {
+    return false;
+  }
+
+  return true;
 }
