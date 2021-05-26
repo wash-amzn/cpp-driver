@@ -100,7 +100,7 @@ CassFuture* cass_session_execute_batch(CassSession* session, const CassBatch* ba
 }
 
 CassFuture* cass_session_execute_raw(CassSession* session, cass_uint8_t opcode, cass_uint8_t flags, const char* frame, size_t frame_size) {
-  Future::Ptr future(session->execute(Request::ConstPtr(new RawRequest(opcode, frame, frame_size))));
+  Future::Ptr future(session->execute_raw(Request::ConstPtr(new RawRequest(opcode, frame, frame_size))));
   future->inc_ref();
   return CassFuture::to(future.get());
 }
@@ -334,6 +334,16 @@ Future::Ptr Session::execute(const Request::ConstPtr& request) {
     const ExecuteRequest* execute = static_cast<const ExecuteRequest*>(request_handler->request());
     request_handler->set_prepared_metadata(cluster()->prepared(execute->prepared()->id()));
   }
+
+  execute(request_handler);
+
+  return future;
+}
+
+Future::Ptr Session::execute_raw(const Request::ConstPtr& request) {
+  ResponseFuture::Ptr future(new ResponseFuture());
+
+  RequestHandler::Ptr request_handler(new RequestHandler(request, future, metrics()));
 
   execute(request_handler);
 

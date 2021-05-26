@@ -44,6 +44,8 @@ public:
 
   Future::Ptr execute(const Request::ConstPtr& request);
 
+  Future::Ptr execute_raw(const Request::ConstPtr& request);
+
 private:
   void execute(const RequestHandler::Ptr& request_handler);
 
